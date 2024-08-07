@@ -90,14 +90,37 @@ void AFractureNetworkActor::ManageConnection()
 			WaitingForConnection = false;
 			UE_LOG(LogTemp, Warning, TEXT("[TCP] Incoming Connection"));
 
-			// Start Recv Thread
+			// Start send & recv thread
 			ClientConnectionFinishedFuture = Async(EAsyncExecution::LargeThreadPool, [&]() {
-				UE_LOG(LogTemp, Warning, TEXT("[TCP] Recv thread started"));
+				UE_LOG(LogTemp, Warning, TEXT("[TCP] Thread started"));
+				SendArrayMessages();
 				ReceiveArrayMessages();
 				}
 			);
 		}
 	}
+}
+
+void AFractureNetworkActor::SendArrayMessages()
+{
+	TArray<float> FloatArray;
+	TArray<FVector> VectorArray = BreakableActorArr[0]->GetPieceLocArray();
+	for (int i = 0; i < VectorArray.Num(); i++) {
+		FloatArray.Add(VectorArray[i].X);
+		FloatArray.Add(VectorArray[i].Y);
+		FloatArray.Add(VectorArray[i].Z);
+	}
+	UE_LOG(LogTemp, Warning, TEXT("Number of pieces: %d"), VectorArray.Num());
+
+	uint32 ArraySize = FloatArray.Num();
+	int32 sent = 0;
+	ConnectionSocket->Send(reinterpret_cast<const uint8*>(&ArraySize), sizeof(uint32), sent);
+
+	TArray<uint8> ArrayData;
+	ArrayData.SetNumUninitialized(ArraySize * sizeof(float));
+	FMemory::Memcpy(ArrayData.GetData(), FloatArray.GetData(), ArrayData.Num());
+	sent = 0;
+	ConnectionSocket->Send(ArrayData.GetData(), ArrayData.Num(), sent);
 }
 
 void AFractureNetworkActor::ReceiveArrayMessages()
@@ -127,26 +150,6 @@ void AFractureNetworkActor::ReceiveArrayMessages()
 				for (int i = 0; i < arrayNum; i++) {
 					UE_LOG(LogTemp, Warning, TEXT("value: %f"), ReceivedArray[i]);
 				}
-
-				// Send Array
-				TArray<float> FloatArray;
-				TArray<FVector> VectorArray = BreakableActorArr[0]->GetPieceLocArray();
-				for (int i = 0; i < VectorArray.Num(); i++) {
-					FloatArray.Add(VectorArray[i].X);
-					FloatArray.Add(VectorArray[i].Y);
-					FloatArray.Add(VectorArray[i].Z);
-				}
-				UE_LOG(LogTemp, Warning, TEXT("Number of pieces: %d"), VectorArray.Num());
-
-				uint32 ArraySize = FloatArray.Num();
-				int32 sent = 0;
-				ConnectionSocket->Send(reinterpret_cast<const uint8*>(&ArraySize), sizeof(uint32), sent);
-
-				TArray<uint8> ArrayData;
-				ArrayData.SetNumUninitialized(ArraySize * sizeof(float));
-				FMemory::Memcpy(ArrayData.GetData(), FloatArray.GetData(), ArrayData.Num());
-				sent = 0;
-				ConnectionSocket->Send(ArrayData.GetData(), ArrayData.Num(), sent);
 			}
 		}
 	}

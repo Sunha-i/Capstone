@@ -35,6 +35,7 @@ public:
 	void OpenConnection();
 	void CloseConnection();
 	void ManageConnection();
+	void SendArrayMessages();
 	void ReceiveArrayMessages();
 
 	FSocket* ListenSocket = NULL;

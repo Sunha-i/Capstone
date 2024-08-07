@@ -21,10 +21,14 @@ protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
+	void CalculateBoneCenters();
+	void DebugSocketInfo();
+
 private:
 	UPROPERTY(VisibleAnywhere)
 	UGeometryCollectionComponent* GeometryCollectionComponent;
 	
+	UPROPERTY()
 	TArray<FVector> PieceLocArr;	// center of mass
 
 public:
