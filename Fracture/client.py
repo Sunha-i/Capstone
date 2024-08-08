@@ -31,7 +31,7 @@ with open(filename, 'w') as obj_file:
     print(f"Written {filename}")
 
 # Send Array - tmp
-array = np.array([1.223, 5.32, 231.23], dtype=np.float32)
+array = np.array([1, 5, 2, 3], dtype=np.int32)
 array = np.insert(array, 0, len(array))
 array_bytes = array.tobytes()
 client.sendall(array_bytes)

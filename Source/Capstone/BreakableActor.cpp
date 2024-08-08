@@ -19,6 +19,8 @@ void ABreakableActor::BeginPlay()
 {
 	Super::BeginPlay();
 	CalculateBoneCenters();
+
+	 TArray<int32> ClusteredIndex = { 3, 0, 0, 1, 2, 4, 3, 4, 3, 2, 3, 2 };		// sample idx for GC_10_12. start from bone idx 1
 }
 
 void ABreakableActor::CalculateBoneCenters()
@@ -47,7 +49,7 @@ void ABreakableActor::CalculateBoneCenters()
 	}
 
 	const int32 NumOfBones = GeometryCollection->NumElements(FGeometryCollection::TransformGroup);
-	UE_LOG(LogTemp, Warning, TEXT("Number of unique bones: %d"), NumOfBones);
+	UE_LOG(LogTemp, Warning, TEXT("Number of unique bones: %d"), NumOfBones - 1);
 
 	// store the sum & count of vertices per bone
 	TArray<FVector3f> BoneVertexSums;
@@ -62,10 +64,12 @@ void ABreakableActor::CalculateBoneCenters()
 
 		BoneVertexSums[BoneIndex] += Vertex;
 		BoneVertexCounts[BoneIndex]++;
+
+		// UE_LOG(LogTemp, Warning, TEXT("Vertex %d: Position = (%f, %f, %f), BoneIndex = %d"), i, Vertex.X, Vertex.Y, Vertex.Z, BoneIndex);
 	}
 
 	// Calculate center of mass for each bone
-	for (int32 BoneIdx = 0; BoneIdx < NumOfBones; ++BoneIdx)
+	for (int32 BoneIdx = 1; BoneIdx < NumOfBones; ++BoneIdx)	// 0th bone is not a piece. root of pieces
 	{
 		FVector3f SumOfVertices = BoneVertexSums[BoneIdx];
 		int32 VertexCount = BoneVertexCounts[BoneIdx];
@@ -74,6 +78,16 @@ void ABreakableActor::CalculateBoneCenters()
 			FVector3f CenterOfMass = SumOfVertices / VertexCount;
 			PieceLocArr.Add(FVector(CenterOfMass.X, CenterOfMass.Y, CenterOfMass.Z));
 			UE_LOG(LogTemp, Log, TEXT("Bone %d: Center of Mass = (%f, %f, %f)"), BoneIdx, CenterOfMass.X, CenterOfMass.Y, CenterOfMass.Z);
+
+			DrawDebugSphere(
+				GetWorld(),
+				FVector(CenterOfMass.X, CenterOfMass.Y, CenterOfMass.Z + 76.4f),
+				2.0f,		 // Sphere radius
+				12,          // Number of segments
+				FColor::Red, // Sphere color
+				false,       // Persistent (false = only for a single frame)
+				50.0f        // Lifetime (1 second)
+			);
 		}
 	}
 }

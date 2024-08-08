@@ -138,17 +138,16 @@ void AFractureNetworkActor::ReceiveArrayMessages()
 			if (ReceivedData.Num() > 0)
 			{
 				// Receive Array
-				TArray<float> ReceivedArray;
-				const int32 numElements = ReceivedData.Num() / sizeof(float);
+				TArray<int32> ReceivedArray;
+				const int32 numElements = ReceivedData.Num() / sizeof(int32);
 				ReceivedArray.SetNum(numElements);
 				FMemory::Memcpy(ReceivedArray.GetData(), ReceivedData.GetData(), ReceivedArray.Num());
 
-				int arrayNum = int(ReceivedArray[0]);
+				int arrayNum = ReceivedArray[0];
 				UE_LOG(LogTemp, Warning, TEXT("Received Array length: %d"), arrayNum);
-				int id = 0;
-				float value = 0;
-				for (int i = 0; i < arrayNum; i++) {
-					UE_LOG(LogTemp, Warning, TEXT("value: %f"), ReceivedArray[i]);
+
+				for (int i = 1; i <= arrayNum; i++) {
+					UE_LOG(LogTemp, Warning, TEXT("value: %d"), ReceivedArray[i]);
 				}
 			}
 		}
