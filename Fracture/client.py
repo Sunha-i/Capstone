@@ -23,15 +23,17 @@ array_data = np.frombuffer(array_data_bytes, dtype=np.float32)
 print("Received Array: ", array_data)
 
 # Write vertices (COM data)
-filename = "vertices.obj"
+filename = "hourglass.txt"
 with open(filename, 'w') as obj_file:
     num_vertices = len(array_data) // 3
     for i in range(num_vertices):
-        obj_file.write(f"v {array_data[i*3]} {array_data[i*3+1]} {array_data[i*3+2]}\n")
+        obj_file.write(f"{array_data[i*3]} {array_data[i*3+1]} {array_data[i*3+2]}\n")
     print(f"Written {filename}")
 
 # Send Array - tmp
-array = np.array([1, 5, 2, 3], dtype=np.int32)
+clusteredIdx = \
+[0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 1, 2, 2, 2, 2, 0, 0, 2, 0, 1, 0, 2, 2, 1, 1, 0, 2, 3, 2, 1, 1, 0, 1, 2, 0, 0, 1, 2, 2, 0, 0, 0, 0, 2, 2, 1, 2, 2, 2, 1, 2, 0, 1, 2, 1, 2, 1, 2, 2, 2, 2, 2, 0, 0, 0, 2, 0, 1, 1, 0, 0, 0, 1, 0, 0, 2, 2, 0, 0, 2, 2, 2, 2, 2, 1, 1, 1, 0, 2, 2, 2, 1, 2, 2, 2, 2, 0, 1, 2, 2, 0, 2, 1, 2, 2, 0, 0, 2, 1, 1, 0, 0, 1, 0, 2, 2, 2, 0, 0, 2, 1, 1, 2, 0, 0, 1, 2, 2, 0, 0, 0, 2, 0, 2, 0, 2, 0, 2, 1, 2, 2, 2, 2, 0, 1, 0, 2, 0, 2, 1, 3, 2, 0, 2, 1, 1, 0, 0, 2, 2, 0, 1, 2, 1, 2, 2, 0, 2, 2, 1, 0, 1, 2, 2, 1, 1, 1, 1, 0, 2, 2, 1, 2, 0, 1, 2, 3, 0, 2, 2, 2, 2, 0, 1, 1, 1, 0, 2, 1, 1, 0, 1, 2, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0, 2, 2, 0, 0, 1, 1, 2, 1, 1, 1, 2, 2, 2, 0, 2, 1, 2, 2, 2, 2, 2, 0, 2, 1, 0, 2, 2, 2, 2, 1, 1, 1, 2]
+array = np.array(clusteredIdx, dtype=np.int32)
 array = np.insert(array, 0, len(array))
 array_bytes = array.tobytes()
 client.sendall(array_bytes)

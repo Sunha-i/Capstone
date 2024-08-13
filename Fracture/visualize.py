@@ -6,10 +6,9 @@ def read_vertices(file_path):
     vertices = []
     with open(file_path, 'r') as file:
         for line in file:
-            if line.startswith('v '):
-                parts = line.split()
-                x, y, z = map(float, parts[1:4])
-                vertices.append((x, y, z))
+            parts = line.split()
+            x, y, z = map(float, parts[:3])
+            vertices.append((x, y, z))
     return vertices
 
 def read_vertices_log(file_path):
@@ -44,7 +43,7 @@ def plot_multiple_files(file_color_pairs):
     plt.show()
 
 file_color_pairs = [
-    ('vertices.obj', 'g')
+    ('vertices.txt', 'g')
 ]
 
 plot_multiple_files(file_color_pairs)
