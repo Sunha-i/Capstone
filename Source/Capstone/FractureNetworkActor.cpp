@@ -18,16 +18,26 @@ void AFractureNetworkActor::BeginPlay()
 	OpenConnection();
 
 	TSubclassOf<ABreakableActor> classToFind;
-	TArray<AActor*> find;
+	TArray<AActor*> foundActors;
 	classToFind = ABreakableActor::StaticClass();
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), classToFind, find);
-	UE_LOG(LogTemp, Warning, TEXT("Get Actor: %d"), find.Num());
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), classToFind, foundActors);
+	UE_LOG(LogTemp, Warning, TEXT("Get Actor: %d"), foundActors.Num());
 
 	ABreakableActor* caster = NULL;
 
-	for (int i = 0; i < find.Num(); i++) {
-		caster = Cast<ABreakableActor>(find[i]);
+	for (int i = 0; i < foundActors.Num(); i++) {
+		caster = Cast<ABreakableActor>(foundActors[i]);
 		BreakableActorArr.Add(caster);
+	}
+}
+
+void AFractureNetworkActor::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	for (int id = 0; id < 1; id++)
+	{
+		ManageConnection();		// receive value from python
 	}
 }
 
@@ -37,11 +47,14 @@ void AFractureNetworkActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	CloseConnection();
 }
 
-// Called every frame
-void AFractureNetworkActor::Tick(float DeltaTime)
+void AFractureNetworkActor::ProcessAllActors()
 {
-	Super::Tick(DeltaTime);
-	ManageConnection();
+	for (int id = 0; id < BreakableActorArr.Num(); id++) {
+		UE_LOG(LogTemp, Warning, TEXT("ID: %d"), id);
+		ManageConnection();
+		UE_LOG(LogTemp, Warning, TEXT("finish for ID: %d"), id);
+	}
+	UE_LOG(LogTemp, Warning, TEXT("Complete Processing: %d actors in BreakableActorArr"), BreakableActorArr.Num());
 }
 
 void AFractureNetworkActor::OpenConnection()
@@ -126,12 +139,13 @@ void AFractureNetworkActor::SendArrayMessages()
 void AFractureNetworkActor::ReceiveArrayMessages()
 {
 	// Repeat
-	while (IsConnectionOpen) {
+	int receivedBatch = 0;
+	while (IsConnectionOpen && receivedBatch < BreakableActorArr.Num()) {
 		uint32 size;
 		TArray<uint8> ReceivedData;
 
 		if (ConnectionSocket->HasPendingData(size)) {
-			ReceivedData.Init(0, 4100);
+			ReceivedData.Init(0, 4104);
 			int32 Read = 0;
 			ConnectionSocket->Recv(ReceivedData.GetData(), ReceivedData.Num(), Read);
 			UE_LOG(LogTemp, Warning, TEXT("ReceivedData Size: %d"), ReceivedData.Num());
@@ -145,17 +159,19 @@ void AFractureNetworkActor::ReceiveArrayMessages()
 
 				ReceivedArray.SetNum(numElements);
 				FMemory::Memcpy(ReceivedArray.GetData(), ReceivedData.GetData(), ReceivedArray.Num());
-				int arrayNum = ReceivedArray[0];
-				UE_LOG(LogTemp, Warning, TEXT("Received Array length: %d"), arrayNum);
+				int id = ReceivedArray[0];
+				int arrayNum = ReceivedArray[1];
+				UE_LOG(LogTemp, Warning, TEXT("Received Array length: %d %d"), id, arrayNum);
 
 				// Set cluster index array
 				TArray<int32> ClusteredIndex;
-				ClusteredIndex.Append(ReceivedArray.GetData() + 1, arrayNum);
-				BreakableActorArr[0]->SetClusteredIndex(ClusteredIndex);
-				BreakableActorArr[0]->SetIsClustered();
+				ClusteredIndex.Append(ReceivedArray.GetData() + 2, arrayNum);
+				BreakableActorArr[id]->SetClusteredIndex(ClusteredIndex);
+				BreakableActorArr[id]->SetIsClustered();
 
-				CloseConnection();
+				receivedBatch++;
 			}
 		}
 	}
+	UE_LOG(LogTemp, Warning, TEXT("outofwhilerange"));
 }

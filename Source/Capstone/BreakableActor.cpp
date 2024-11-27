@@ -16,6 +16,15 @@ ABreakableActor::ABreakableActor()
 	ProceduralMeshComponent = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("ClusterResultMesh"));
 	ProceduralMeshComponent->SetupAttachment(GetRootComponent());
 
+	/*ProceduralMeshComponent->SetCollisionProfileName(TEXT("BlockAll"));
+	ProceduralMeshComponent->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Block);
+	ProceduralMeshComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	ProceduralMeshComponent->SetCollisionObjectType(ECollisionChannel::ECC_PhysicsBody);
+
+	ProceduralMeshComponent->bUseComplexAsSimpleCollision = false;
+	ProceduralMeshComponent->SetSimulatePhysics(true);
+	ProceduralMeshComponent->bAlwaysCreatePhysicsState = true;*/
+
 	ProceduralMeshMaterial.SetNum(12);
 }
 
@@ -94,15 +103,15 @@ void ABreakableActor::CalculateBoneCenters()
 			PieceLocArr.Add(FVector(CenterOfMass.X, CenterOfMass.Y, CenterOfMass.Z));
 			//UE_LOG(LogTemp, Log, TEXT("Bone %d: Center of Mass = (%f, %f, %f)"), BoneIdx, CenterOfMass.X, CenterOfMass.Y, CenterOfMass.Z);
 
-			DrawDebugSphere(
-				GetWorld(),
-				FVector(CenterOfMass.X, CenterOfMass.Y, CenterOfMass.Z),
-				2.0f,		 // Sphere radius
-				12,          // Number of segments
-				FColor::Red, // Sphere color
-				false,       // Persistent (false = only for a single frame)
-				1.0f         // Lifetime (1 second)
-			);
+			//DrawDebugSphere(
+			//	GetWorld(),
+			//	FVector(CenterOfMass.X, CenterOfMass.Y, CenterOfMass.Z),
+			//	2.0f,		 // Sphere radius
+			//	12,          // Number of segments
+			//	FColor::Red, // Sphere color
+			//	false,       // Persistent (false = only for a single frame)
+			//	1.0f         // Lifetime (1 second)
+			//);
 		}
 	}
 }
@@ -153,10 +162,12 @@ void ABreakableActor::CreateMeshForBoneIndex()
 	{
 		FIntVector Indices = IndicesArray[i];
 		UE_LOG(LogTemp, Log, TEXT("Face %d: Indices = (%d, %d, %d)"), i, Indices.X, Indices.Y, Indices.Z);
+		UE_LOG(LogTemp, Log, TEXT("BoneIndex: %d %d %d"), BoneMapArray[Indices.X], BoneMapArray[Indices.Y], BoneMapArray[Indices.Z]);
 	}*/
 
 	const int32 NumOfBones = GeometryCollection->NumElements(FGeometryCollection::TransformGroup);
 	UE_LOG(LogTemp, Warning, TEXT("Before) Number of unique bones: %d"), NumOfBones - 1);
+	UE_LOG(LogTemp, Warning, TEXT("VertexArray.Num(): %d, BoneMapArray.Num(): %d, NormalArray.Num(): %d, IndicesArray.Num(): %d"), VertexArray.Num(), BoneMapArray.Num(), NormalArray.Num(), IndicesArray.Num());
 
 	// Check validation for Clustered Index
 	if (ClusteredIndex.Num() != NumOfBones - 1)
@@ -171,12 +182,24 @@ void ABreakableActor::CreateMeshForBoneIndex()
 	TMap<int32, TArray<FVector>> SectionNormalsMap;
 	TMap<int32, int32> VertexMap;
 
+	TMap<FString, TArray<int32>> FaceConnectedComb;
+	TMap<int32, TMap<int32, TArray<int32>>> OriginalSection;
+
 	// Set offset for visualization
 	FVector ActorLocation = GetActorLocation();
 	FBox ActorBoundingBox = GetComponentsBoundingBox();
 	FVector BoxExtent = ActorBoundingBox.GetExtent() * 2.0f;
 
-	const FVector Offset(BoxExtent.X + 100.f, 0.f, ActorLocation.Z);
+	//const FVector Offset(BoxExtent.X + 100.f, 0.f, ActorLocation.Z);
+	const FVector Offset = ActorLocation;	// Apply scale
+
+	PieceMaterial = GeometryCollectionComponent->GetMaterial(0);
+
+	if (GeometryCollectionComponent)
+	{
+		GeometryCollectionComponent->DestroyComponent();
+		GeometryCollectionComponent = nullptr;
+	}
 
 	// Group each triangle using its cluster index
 	for (int32 i = 0; i < IndicesArray.Num(); ++i)
@@ -200,6 +223,7 @@ void ABreakableActor::CreateMeshForBoneIndex()
 				SectionVerticesMap.Add(ClusterIndex, TArray<FVector>());
 				SectionIndicesMap.Add(ClusterIndex, TArray<int32>());
 				SectionNormalsMap.Add(ClusterIndex, TArray<FVector>());
+				OriginalSection.Add(ClusterIndex, TMap<int32, TArray<int32>>());
 			}
 
 			if (!VertexMap.Contains(Indices.X))
@@ -224,12 +248,52 @@ void ABreakableActor::CreateMeshForBoneIndex()
 			SectionIndicesMap[ClusterIndex].Add(VertexMap[Indices.X]);
 			SectionIndicesMap[ClusterIndex].Add(VertexMap[Indices.Y]);
 			SectionIndicesMap[ClusterIndex].Add(VertexMap[Indices.Z]);
+
+			// Record the vertex index within the cluster's section
+			if (!OriginalSection[ClusterIndex].Contains(BoneIndex - 1))
+			{
+				OriginalSection[ClusterIndex].Add(BoneIndex - 1, { SectionIndicesMap[ClusterIndex].Num() });
+			}
+			else
+			{
+				OriginalSection[ClusterIndex][BoneIndex - 1].Add(SectionIndicesMap[ClusterIndex].Num());
+			}
+
+			const FVector Vertex1 = FVector(VertexArray[FaceIndices[0]]) + Offset;
+			const FVector Vertex2 = FVector(VertexArray[FaceIndices[1]]) + Offset;
+			const FVector Vertex3 = FVector(VertexArray[FaceIndices[2]]) + Offset;
+
+			FString VertexKey = CreateVertexKey(Vertex1, Vertex2, Vertex3);
+
+			// Check if this combination is already in the hash map
+			if (FaceConnectedComb.Contains(VertexKey))
+			{
+				//UE_LOG(LogTemp, Warning, TEXT("Duplicate vertex combination found at index %d"), i);
+				FaceConnectedComb[VertexKey].Add(BoneIndex - 1);
+			}
+			else
+			{
+				FaceConnectedComb.Add(VertexKey, { BoneIndex - 1 });
+			}
 		}
 		else if (BoneIndex != 0) 
 		{
 			UE_LOG(LogTemp, Warning, TEXT("Invalid index for the given ClusteredIndex"));
 		}
 	}
+
+	int32 numberoftwo = 0;
+	for (const TPair<FString, TArray<int32>>& Elem : FaceConnectedComb)
+	{
+		FString Key = Elem.Key;
+
+		const TArray<int32>& Values = Elem.Value;
+		if (Values.Num() > 2)
+			numberoftwo++;
+	}
+	UE_LOG(LogTemp, Log, TEXT("it's over 2: %d"), numberoftwo);
+
+	int32 tmpSectionIndex = 0;
 
 	// Generate mesh for each section
 	for (auto& Section : SectionVerticesMap)
@@ -239,106 +303,247 @@ void ABreakableActor::CreateMeshForBoneIndex()
 		const TArray<int32>& SelectedIndices = SectionIndicesMap[SectionIndex];
 		const TArray<FVector>& SelectedNormals = SectionNormalsMap[SectionIndex];
 
-		if (SelectedVertices.Num() > 0 && SelectedIndices.Num() > 0)
+		UE_LOG(LogTemp, Warning, TEXT("bonindex: %d"), OriginalSection[SectionIndex].Num());
+		
+		TSet<int32> Visited;
+
+		const TMap<int32, TArray<int32>>& InnerMap = OriginalSection[SectionIndex];
+
+		UE_LOG(LogTemp, Warning, TEXT("Number of pieces in Section %d: %d"), SectionIndex, InnerMap.Num());
+
+		for (const TPair<int32, TArray<int32>>& InnerPair : InnerMap)
 		{
-			// Random vertex colors
-			FLinearColor RandomColor = FLinearColor::MakeRandomColor();
-			TArray<FLinearColor> VertexColors;
-			VertexColors.Init(RandomColor, SelectedVertices.Num());
-			//UE_LOG(LogTemp, Warning, TEXT("Random Color: %f %f %f"), RandomColor.R, RandomColor.G, RandomColor.B);
-
-			ProceduralMeshComponent->CreateMeshSection_LinearColor(
-				SectionIndex,				// Section index
-				SelectedVertices,			// Vertex array
-				SelectedIndices,			// Triangle index array
-				SelectedNormals,			// Normal vector array (opt)
-				TArray<FVector2D>(),		// UV0 - Texture coordinate (opt)
-				VertexColors,				// Vertex color array (opt)
-				TArray<FProcMeshTangent>(), // Tangent vector array (opt)
-				true						// Whether to create collision
-			);
-
-			if (ProceduralMeshMaterial.Num() < 12)
-			{
-				UE_LOG(LogTemp, Error, TEXT("No material !!!"));
-				return;
-			}
-			//ProceduralMeshComponent->SetMaterial(SectionIndex, ProceduralMeshMaterial[SectionIndex]);
-			//PieceMaterial = GeometryCollectionComponent->GetMaterial(0);
-			UMaterialInstanceDynamic* DynamicMaterial = UMaterialInstanceDynamic::Create(PieceMaterial, this);
-			DynamicMaterial->SetVectorParameterValue(TEXT("Param"), RandomColor);
-			ProceduralMeshComponent->SetMaterial(SectionIndex, DynamicMaterial);
+			int32 InnerKey = InnerPair.Key;
+			UE_LOG(LogTemp, Log, TEXT("InnerKey List : %d"), InnerKey);
 		}
-		else
+
+		for (const TPair<int32, TArray<int32>>& InnerPair : InnerMap)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("No vertices or indices found for SectionIndex %d"), SectionIndex);
+			int32 InnerKey = InnerPair.Key;
+
+			if (!Visited.Contains(InnerKey))
+			{
+				UE_LOG(LogTemp, Warning, TEXT("Starting DFS for group at piece %d"), InnerKey);
+
+				TArray<int32> CurrentGroup;
+				DFS(InnerKey, InnerMap, Visited, FaceConnectedComb, SelectedVertices, SelectedIndices, CurrentGroup);
+
+				TArray<int32> tmpSelectedIndices;
+				UE_LOG(LogTemp, Log, TEXT("Group formed:"));
+				for (int32 GroupElement : CurrentGroup)
+				{
+					UE_LOG(LogTemp, Log, TEXT("%d"), GroupElement);
+
+					int32 tmp = SelectedIndices[GroupElement];
+
+					const TArray<int32>& tmpArray = OriginalSection[SectionIndex][GroupElement];
+					for (int32 tmpElement : tmpArray)
+					{
+						tmpSelectedIndices.Add(SectionIndicesMap[SectionIndex][tmpElement - 3]);
+						tmpSelectedIndices.Add(SectionIndicesMap[SectionIndex][tmpElement - 2]);
+						tmpSelectedIndices.Add(SectionIndicesMap[SectionIndex][tmpElement - 1]);
+					}
+				}
+
+				UE_LOG(LogTemp, Warning, TEXT("Finished DFS for group starting at piece %d"), InnerKey);
+
+				// Map for counting combination with repetition
+				TMap<FString, int32> TriangleCombinationCount;
+
+				// Count the number of duplicate triangle combinations
+				for (int32 i = 0; i < tmpSelectedIndices.Num(); i += 3)
+				{
+					if (tmpSelectedIndices.IsValidIndex(i) &&
+						tmpSelectedIndices.IsValidIndex(i + 1) &&
+						tmpSelectedIndices.IsValidIndex(i + 2))
+					{
+						// Create a key based on the triangle's vertex combination
+						const FVector& Vertex1 = SelectedVertices[tmpSelectedIndices[i]];
+						const FVector& Vertex2 = SelectedVertices[tmpSelectedIndices[i + 1]];
+						const FVector& Vertex3 = SelectedVertices[tmpSelectedIndices[i + 2]];
+
+						FString TriangleKey = CreateVertexKey(Vertex1, Vertex2, Vertex3);
+
+						// Increment the count
+						if (TriangleCombinationCount.Contains(TriangleKey))
+						{
+							TriangleCombinationCount[TriangleKey]++;
+						}
+						else
+						{
+							TriangleCombinationCount.Add(TriangleKey, 1);
+						}
+					}
+				}
+
+				// Keep only combinations that occur once
+				TArray<int32> FilteredIndices;
+				for (int32 i = 0; i < tmpSelectedIndices.Num(); i += 3)
+				{
+					if (tmpSelectedIndices.IsValidIndex(i) &&
+						tmpSelectedIndices.IsValidIndex(i + 1) &&
+						tmpSelectedIndices.IsValidIndex(i + 2))
+					{
+						const FVector& Vertex1 = SelectedVertices[tmpSelectedIndices[i]];
+						const FVector& Vertex2 = SelectedVertices[tmpSelectedIndices[i + 1]];
+						const FVector& Vertex3 = SelectedVertices[tmpSelectedIndices[i + 2]];
+
+						FString TriangleKey = CreateVertexKey(Vertex1, Vertex2, Vertex3);
+
+						// Add only combinations with a count of 1
+						if (TriangleCombinationCount.Contains(TriangleKey) && TriangleCombinationCount[TriangleKey] == 1)
+						{
+							FilteredIndices.Add(tmpSelectedIndices[i]);
+							FilteredIndices.Add(tmpSelectedIndices[i + 1]);
+							FilteredIndices.Add(tmpSelectedIndices[i + 2]);
+						}
+					}
+				}
+
+				// Replace tmpSelectedIndices with the filtered result
+				tmpSelectedIndices = FilteredIndices;
+
+				if (SelectedVertices.Num() > 0 && SelectedIndices.Num() > 0)
+				{
+					// Random vertex colors
+					FLinearColor RandomColor = FLinearColor::MakeRandomColor();
+					TArray<FLinearColor> VertexColors;
+					VertexColors.Init(RandomColor, SelectedVertices.Num());
+					UE_LOG(LogTemp, Warning, TEXT("Random Color: %f %f %f"), RandomColor.R, RandomColor.G, RandomColor.B);
+
+					ProceduralMeshComponent->CreateMeshSection_LinearColor(
+						tmpSectionIndex,				// Section index
+						SelectedVertices,				// Vertex array
+						tmpSelectedIndices,				// Triangle index array
+						SelectedNormals,				// Normal vector array (opt)
+						TArray<FVector2D>(),			// UV0 - Texture coordinate (opt)
+						VertexColors,					// Vertex color array (opt)
+						TArray<FProcMeshTangent>(),		// Tangent vector array (opt)
+						true							// Whether to create collision
+					);
+
+					/* Dynamically ~ */
+					//NewMeshComponent->AddCollisionConvexMesh(SelectedVertices);
+					//NewMeshComponent->UpdateCollisionProfile();
+
+					if (ProceduralMeshMaterial.Num() < 12)
+					{
+						UE_LOG(LogTemp, Error, TEXT("No material !!!"));
+						return;
+					}
+				
+					tmpSectionIndex++;
+				}
+				else
+				{
+					UE_LOG(LogTemp, Warning, TEXT("No vertices or indices found for SectionIndex %d"), SectionIndex);
+				}
+			}
 		}
 	}
+
+	// Set Color
+	for (int i = 0; i <= tmpSectionIndex; i++) {
+		const float Saturation = 0.95f;
+		const float Value = 1.0f;
+
+		// Evenly distribute hue values across sections
+		float Hue = (360.0f / tmpSectionIndex) * i;
+
+		// HSV to RGB conversion
+		FLinearColor newRandomColor = FLinearColor::MakeFromHSV8(
+			static_cast<uint8>(Hue),
+			static_cast<uint8>(Saturation * 255),
+			static_cast<uint8>(Value * 255)
+		);
+
+		UE_LOG(LogTemp, Log, TEXT("Section %d Color Applied: R=%f, G=%f, B=%f"), i, newRandomColor.R, newRandomColor.G, newRandomColor.B);
+		UMaterialInstanceDynamic* DynamicMaterial = UMaterialInstanceDynamic::Create(PieceMaterial, this);
+		DynamicMaterial->SetVectorParameterValue(TEXT("Param"), newRandomColor);
+		ProceduralMeshComponent->SetMaterial(i, DynamicMaterial);
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("number of faces: %d"), FaceConnectedComb.Num());
+
 
 	UE_LOG(LogTemp, Warning, TEXT("After) Number of unique bones: %d"), SectionVerticesMap.Num());
 
 }
 
-void ABreakableActor::RemoveFaces()
+void ABreakableActor::DFS(int32 CurrentKey, const TMap<int32, TArray<int32>>& InnerMap, TSet<int32>& Visited, 
+	const TMap<FString, TArray<int32>>& FaceConnectedComb, const TArray<FVector>& SelectedVertices, 
+	const TArray<int32>& SelectedIndices, TArray<int32>& CurrentGroup)
 {
-	/*for (int32 i = 0; i < IndicesArray.Num(); ++i)
+	const TArray<int32>* InnerArrayPtr = InnerMap.Find(CurrentKey);
+	if (!InnerArrayPtr)
 	{
-		FIntVector Indices = IndicesArray[i];
-		int32 BoneIndex = BoneMapArray[Indices.X];
+		//UE_LOG(LogTemp, Warning, TEXT("CurrentKey %d not found in InnerMap!"), CurrentKey);
+		return;
+	}
+	const TArray<int32>& InnerArray = *InnerArrayPtr;
 
-		if (ClusteredIndex.IsValidIndex(BoneIndex - 1))
+	Visited.Add(CurrentKey);
+	CurrentGroup.Add(CurrentKey);
+
+	UE_LOG(LogTemp, Log, TEXT("\tVertexArray.Num(): %d"), SelectedVertices.Num());
+	UE_LOG(LogTemp, Log, TEXT("\tInnerMap[CurrentKey] : %d %d"), InnerMap[CurrentKey][0], InnerMap[CurrentKey][InnerMap[CurrentKey].Num()-1]);
+
+	//UE_LOG(LogTemp, Warning, TEXT("InnerArray: %d %d"), InnerArray[0], InnerArray[InnerArray.Num()-1]);
+
+	for (int32 ArrayValue : InnerMap[CurrentKey])
+	{
+		//UE_LOG(LogTemp, Log, TEXT("ArrayValue: %d"), ArrayValue);
+
+		FVector v1 = SelectedVertices[SelectedIndices[ArrayValue - 3]];
+		FVector v2 = SelectedVertices[SelectedIndices[ArrayValue - 2]];
+		FVector v3 = SelectedVertices[SelectedIndices[ArrayValue - 1]];  
+
+		FString VertexKey = CreateVertexKey(v1, v2, v3);
+
+		if (FaceConnectedComb.Contains(VertexKey))
 		{
-			int32 ClusterIndex = ClusteredIndex[BoneIndex - 1];
+			const TArray<int32>& ConnectedPieces = FaceConnectedComb[VertexKey];
 
-			int32 vtxidx_x = Indices.X;
-			int32 vtxidx_y = Indices.Y;
-			int32 vtxidx_z = Indices.Z;
-
-			while (true)
+			if (ConnectedPieces.Num() == 2)
 			{
-				if (vtxidx_x == 0)	break;
-				if (VertexArray[vtxidx_x].X != VertexArray[vtxidx_x - 1].X
-					|| VertexArray[vtxidx_x].Y != VertexArray[vtxidx_x - 1].Y
-					|| VertexArray[vtxidx_x].Z != VertexArray[vtxidx_x - 1].Z)
-					break;
+				for (int32 PieceIndex : ConnectedPieces)
+				{
+					if (PieceIndex != CurrentKey && !Visited.Contains(PieceIndex))
+					{
+						//UE_LOG(LogTemp, Warning, TEXT("target index : %d <-> connected index : %d"), CurrentKey, PieceIndex);
 
-				vtxidx_x--;
-			}
-			while (true)
-			{
-				if (vtxidx_y == 0)	break;
-				if (VertexArray[vtxidx_y].X != VertexArray[vtxidx_y - 1].X
-					|| VertexArray[vtxidx_y].Y != VertexArray[vtxidx_y - 1].Y
-					|| VertexArray[vtxidx_y].Z != VertexArray[vtxidx_y - 1].Z)
-					break;
-
-				vtxidx_y--;
-			}
-			while (true)
-			{
-				if (vtxidx_z == 0)	break;
-				if (VertexArray[vtxidx_z].X != VertexArray[vtxidx_z - 1].X
-					|| VertexArray[vtxidx_z].Y != VertexArray[vtxidx_z - 1].Y
-					|| VertexArray[vtxidx_z].Z != VertexArray[vtxidx_z - 1].Z)
-					break;
-
-				vtxidx_z--;
-			}
-
-			TArray<int32> CorrectionIndices = { vtxidx_x, vtxidx_y, vtxidx_z };
-			CorrectionIndices.Sort();
-
-			if (!UniqueFacesMap.Contains(CorrectionIndices))
-			{
-				UniqueFacesMap.Add(CorrectionIndices, 1);
-			}
-			else
-			{
-				UniqueFacesMap[CorrectionIndices]++;
-				UE_LOG(LogTemp, Warning, TEXT("face cnt: %d"), UniqueFacesMap[CorrectionIndices]);
+						DFS(PieceIndex, InnerMap, Visited, FaceConnectedComb, SelectedVertices, SelectedIndices, CurrentGroup);
+					}
+				}
 			}
 		}
-	}*/
+	}
+}
+
+FString ABreakableActor::CreateVertexKey(const FVector& V1, const FVector& V2, const FVector& V3)
+{
+	TArray<FVector> Vertices = { V1, V2, V3 };
+
+	// Sort the vertices so that their order doesn't matter
+	Vertices.Sort([](const FVector& A, const FVector& B)
+		{
+			return A.X < B.X || (A.X == B.X && A.Y < B.Y) || (A.X == B.X && A.Y == B.Y && A.Z < B.Z);
+		});
+
+	// Sort the X, Y, Z components of each vertex to handle permutation of coordinates
+	for (FVector& Vec : Vertices)
+	{
+		TArray<double> Components = { Vec.X, Vec.Y, Vec.Z };
+
+		Components.Sort();
+		Vec = FVector(Components[0], Components[1], Components[2]);
+	}
+
+	// Create a unique string key from the sorted vertices
+	return FString::Printf(TEXT("%f,%f,%f-%f,%f,%f-%f,%f,%f"),
+		Vertices[0].X, Vertices[0].Y, Vertices[0].Z,
+		Vertices[1].X, Vertices[1].Y, Vertices[1].Z,
+		Vertices[2].X, Vertices[2].Y, Vertices[2].Z);
 }
 
 void ABreakableActor::SetClusteredIndex(const TArray<int32>& NewClusteredIndex)

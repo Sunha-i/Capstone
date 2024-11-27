@@ -26,7 +26,6 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 public:	
-	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
 	bool IsConnectionOpen = false;
@@ -38,9 +37,13 @@ public:
 	void SendArrayMessages();
 	void ReceiveArrayMessages();
 
+	UFUNCTION(BlueprintCallable)
+	void ProcessAllActors();
+
 	FSocket* ListenSocket = NULL;
 	FSocket* ConnectionSocket = NULL;
-
 	TFuture<void> ClientConnectionFinishedFuture;
+
+	UPROPERTY(VisibleAnywhere)
 	TArray<ABreakableActor*> BreakableActorArr;
 };

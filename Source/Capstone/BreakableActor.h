@@ -29,9 +29,15 @@ public:
 	void CalculateBoneCenters();
 	void DebugSocketInfo();
 	void CreateMeshForBoneIndex();
-	void RemoveFaces();
+
+	UFUNCTION(BlueprintCallable, Category = "GeomCollectMesh")
 	void SetClusteredIndex(const TArray<int32>& NewClusteredIndex);
 	void SetIsClustered();
+
+	FString CreateVertexKey(const FVector& V1, const FVector& V2, const FVector& V3);
+	void DFS(int32 CurrentKey, const TMap<int32, TArray<int32>>& InnerMap, TSet<int32>& Visited, 
+			const TMap<FString, TArray<int32>>& FaceConnectedComb, const TArray<FVector>& SelectedVertices, 
+			const TArray<int32>& SelectedIndices, TArray<int32>& CurrentGroup);
 
 	TArray<FVector> GetPieceLocArray() const;
 
@@ -49,6 +55,8 @@ private:
 	UProceduralMeshComponent* ProceduralMeshComponent;
 	
 	TArray<FVector> PieceLocArr;	// center of mass
+	
+	UPROPERTY(EditAnywhere, Category = "GeomCollectMesh")
 	TArray<int32> ClusteredIndex;
 
 	bool isClustered = false;

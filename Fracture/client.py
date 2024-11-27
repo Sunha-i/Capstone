@@ -30,13 +30,22 @@ with open(filename, 'w') as obj_file:
         obj_file.write(f"{array_data[i*3]} {array_data[i*3+1]} {array_data[i*3+2]}\n")
     print(f"Written {filename}")
 
-# Send Array - tmp
-clusteredIdx = \
-[0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 1, 2, 2, 2, 2, 0, 0, 2, 0, 1, 0, 2, 2, 1, 1, 0, 2, 3, 2, 1, 1, 0, 1, 2, 0, 0, 1, 2, 2, 0, 0, 0, 0, 2, 2, 1, 2, 2, 2, 1, 2, 0, 1, 2, 1, 2, 1, 2, 2, 2, 2, 2, 0, 0, 0, 2, 0, 1, 1, 0, 0, 0, 1, 0, 0, 2, 2, 0, 0, 2, 2, 2, 2, 2, 1, 1, 1, 0, 2, 2, 2, 1, 2, 2, 2, 2, 0, 1, 2, 2, 0, 2, 1, 2, 2, 0, 0, 2, 1, 1, 0, 0, 1, 0, 2, 2, 2, 0, 0, 2, 1, 1, 2, 0, 0, 1, 2, 2, 0, 0, 0, 2, 0, 2, 0, 2, 0, 2, 1, 2, 2, 2, 2, 0, 1, 0, 2, 0, 2, 1, 3, 2, 0, 2, 1, 1, 0, 0, 2, 2, 0, 1, 2, 1, 2, 2, 0, 2, 2, 1, 0, 1, 2, 2, 1, 1, 1, 1, 0, 2, 2, 1, 2, 0, 1, 2, 3, 0, 2, 2, 2, 2, 0, 1, 1, 1, 0, 2, 1, 1, 0, 1, 2, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0, 2, 2, 0, 0, 1, 1, 2, 1, 1, 1, 2, 2, 2, 0, 2, 1, 2, 2, 2, 2, 2, 0, 2, 1, 0, 2, 2, 2, 2, 1, 1, 1, 2]
-array = np.array(clusteredIdx, dtype=np.int32)
-array = np.insert(array, 0, len(array))
-array_bytes = array.tobytes()
-client.sendall(array_bytes)
+# Send Array - sample idx for GC_10_12
+filenames = [
+    "result/final/21_out.txt"
+    "result/final/26_out.txt",
+    "result/final/4_out.txt",
+]
+for idx, filepath in enumerate(filenames):  # filenames 배열의 길이만큼 반복
+    with open(filepath, "r") as file:
+        data = file.read().strip()
+    clusteredIdx = list(map(int, data.strip('[]').split(',')))  # 파일 데이터 파싱
+    array = np.array(clusteredIdx, dtype=np.int32)
+    array = np.insert(array, 0, len(array))  # 배열 크기 삽입
+    array = np.insert(array, 0, idx)  # 배열 크기 삽입
+    array_bytes = array.tobytes()  # 바이트 변환
+    client.sendall(array_bytes)  # 전송
+    print(f"Sent data batch {idx + 1}")
 
 end = time.time()
 print(f"total time: {end-start} ms")
